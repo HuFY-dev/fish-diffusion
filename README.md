@@ -14,6 +14,9 @@
 <a href="https://discord.gg/wbYSRBrW2E">
 <img alt="Discord" src="https://img.shields.io/discord/1044927142900809739?color=%23738ADB&label=Discord&logo=discord&logoColor=white&style=flat-square">
 </a>
+<a href="https://huggingface.co/spaces/lengyue233/fish-diffusion">
+<img alt="Hugging Face" src="https://img.shields.io/badge/🤗%20Spaces-HiFiSinger-blue.svg?style=flat-square">
+</a>
 </div>
 
 </div>
@@ -23,8 +26,6 @@
 An easy to understand TTS / SVS / SVC training framework.
 
 > Check our [Wiki](https://fishaudio.github.io/fish-diffusion/) to get started! 
- 
-> As the main branch is actively developing, we recommend that new users choose a stable version, such as [v1.12](https://github.com/fishaudio/fish-diffusion/tree/v1.12)
 
 [中文文档](README.zh.md)
 
@@ -41,7 +42,7 @@ The following commands need to be executed in the conda environment of python 3.
 ```bash
 # Install PyTorch related core dependencies, skip if installed
 # Reference: https://pytorch.org/get-started/locally/
-conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+conda install "pytorch>=2.0.0" "torchvision>=0.15.0" "torchaudio>=2.0.0" pytorch-cuda=11.8 -c pytorch -c nvidia
 
 # Install Poetry dependency management tool, skip if installed
 # Reference: https://python-poetry.org/docs/#installation
@@ -63,11 +64,6 @@ If you are using the script to download the model, you can use the `--agree-lice
 
 ```bash
 python tools/download_nsf_hifigan.py --agree-license
-```
-
-If you want to try the latest [ContentVec](https://github.com/auspicious3000/contentvec) to extract phoneme features, you can use the following command to download it.
-```bash
-python tools/download_nsf_hifigan.py --content-vec
 ```
 
 ### Manual download

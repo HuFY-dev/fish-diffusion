@@ -1,4 +1,7 @@
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pathlib import Path
+
+from fish_diffusion.datasets.hifisinger import HiFiSVCDataset
+from fish_diffusion.datasets.utils import get_datasets_from_subfolder
 
 _base_ = [
     "./_base_/archs/hifi_svc.py",
@@ -8,7 +11,9 @@ _base_ = [
 ]
 
 speaker_mapping = {
-    "placeholder": 0,
+    "aria": 0,
+    "opencpop": 1,
+    "lengyue": 2,
 }
 
 model = dict(

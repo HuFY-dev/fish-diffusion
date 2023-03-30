@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import librosa
 import numpy as np
@@ -11,19 +11,20 @@ import torch
 from fish_audio_preprocess.utils import loudness_norm
 from loguru import logger
 from mmengine import Config
+from natsort import natsorted
 from torch import nn
 
+from fish_diffusion.archs.diffsinger.diffsinger import DiffSingerLightning
 from fish_diffusion.modules.energy_extractors import ENERGY_EXTRACTORS
 from fish_diffusion.modules.feature_extractors import FEATURE_EXTRACTORS
 from fish_diffusion.modules.pitch_extractors import PITCH_EXTRACTORS
 from fish_diffusion.utils.audio import separate_vocals, slice_audio
 from fish_diffusion.utils.inference import load_checkpoint
 from fish_diffusion.utils.tensor import repeat_expand
-from tools.diffusion.gradio_ui import launch_gradio
 
 
 class SVCInference(nn.Module):
-    def __init__(self, config, checkpoint):
+    def __init__(self, config, checkpoint, model_cls=DiffSingerLightning):
         super().__init__()
 
         self.config = config
@@ -42,13 +43,15 @@ class SVCInference(nn.Module):
 
         if os.path.isdir(checkpoint):
             # Find the latest checkpoint
-            checkpoints = sorted(os.listdir(checkpoint))
+            checkpoints = natsorted(os.listdir(checkpoint))
             logger.info(
                 f"Found {len(checkpoints)} checkpoints, using {checkpoints[-1]}"
             )
             checkpoint = os.path.join(checkpoint, checkpoints[-1])
 
-        self.model = load_checkpoint(config, checkpoint, device="cpu")
+        self.model = load_checkpoint(
+            config, checkpoint, device="cpu", model_cls=model_cls
+        )
 
     @property
     def device(self):
@@ -60,7 +63,7 @@ class SVCInference(nn.Module):
         audio: torch.Tensor,
         sr: int,
         pitch_adjust: int = 0,
-        speaker_id: int = 0,
+        speakers: torch.Tensor = 0,
         sampler_progress: bool = False,
         sampler_interval: Optional[int] = None,
         pitches: Optional[torch.Tensor] = None,
@@ -70,6 +73,8 @@ class SVCInference(nn.Module):
         # Extract and process pitch
         if pitches is None:
             pitches = self.pitch_extractor(audio, sr, pad_to=mel_len).float()
+        else:
+            pitches = repeat_expand(pitches, mel_len)
 
         if (pitches == 0).all():
             return np.zeros((audio.shape[-1],))
@@ -94,7 +99,7 @@ class SVCInference(nn.Module):
         contents_lens = torch.tensor([mel_len]).to(self.device)
 
         features = self.model.model.forward_features(
-            speakers=torch.tensor([speaker_id]).long().to(self.device),
+            speakers=speakers.to(self.device),
             contents=text_features[None].to(self.device),
             contents_lens=contents_lens,
             contents_max_len=max(contents_lens),
@@ -113,6 +118,60 @@ class SVCInference(nn.Module):
         wav = self.model.vocoder.spec2wav(result[0].T, f0=pitches).cpu().numpy()
 
         return wav
+
+    def _parse_speaker(self, speaker):
+        to_long_tensor = lambda x: torch.tensor([x], dtype=torch.long)
+
+        # Speaker id
+        if isinstance(speaker, int):
+            return to_long_tensor(speaker)
+
+        # Speaker name
+        if (
+            hasattr(self.config, "speaker_mapping")
+            and speaker in self.config.speaker_mapping
+        ):
+            return to_long_tensor(self.config.speaker_mapping[speaker])
+
+        # Speaker id
+        if speaker.isdigit():
+            return to_long_tensor(int(speaker))
+
+        # Speaker mix
+        speaker = speaker.split(",")
+        speaker_mix = []
+
+        for s in speaker:
+            s = s.split(":")
+            speaker_id = self._parse_speaker(s[0])
+
+            if len(s) == 1:
+                speaker_mix.append((speaker_id, 1.0))
+            else:
+                speaker_mix.append((speaker_id, float(s[1])))
+
+        # Normalize speaker mix weights to 1
+        summation = sum([s[1] for s in speaker_mix])
+        speaker_mix = [(s[0], s[1] / summation) for s in speaker_mix]
+
+        logger.info(
+            f"Speaker mix: {speaker} -> {[f'{s[0].item()}:{s[1]}' for s in speaker_mix]}"
+        )
+
+        if hasattr(self.model, "model"):  # DiffSinger
+            weight = self.model.model
+        elif hasattr(self.model, "generator"):  # HiFiSinger
+            weight = self.model.generator
+        else:
+            logger.error("Model does not have generator or model attribute")
+            exit()
+
+        weight = weight.speaker_encoder.embedding.weight
+        mixed_weight = torch.zeros_like(weight[0])[None]
+        for s in speaker_mix:
+            mixed_weight += weight[s[0]] * s[1]
+
+        return mixed_weight.float()
 
     @torch.no_grad()
     def inference(
@@ -135,7 +194,7 @@ class SVCInference(nn.Module):
         Args:
             input_path: input path
             output_path: output path
-            speaker: speaker id or speaker name
+            speaker: speaker id or speaker name or speaker mix (a:0.5,b:0.5)
             pitch_adjust: pitch adjust
             silence_threshold: silence threshold of librosa.effects.split
             max_slice_duration: maximum duration of each slice
@@ -181,11 +240,7 @@ class SVCInference(nn.Module):
             return
 
         # Process speaker
-        try:
-            speaker_id = self.config.speaker_mapping[speaker]
-        except (KeyError, AttributeError):
-            # Parse speaker id
-            speaker_id = int(speaker)
+        speakers = self._parse_speaker(speaker)
 
         # Load audio
         audio, sr = librosa.load(input_path, sr=self.config.sampling_rate, mono=True)
@@ -210,7 +265,16 @@ class SVCInference(nn.Module):
 
         if pitches_path is not None:
             logger.info(f"Restoring pitches from {pitches_path}")
-            pitches = torch.from_numpy(np.load(pitches_path)).to(self.device).float()
+
+            # If pitches_path is a json file, load it as a list of pitches
+            if Path(pitches_path).suffix == ".json":
+                with open(pitches_path, "r") as f:
+                    pitches = json.load(f)
+                    pitches = torch.FloatTensor(pitches).to(self.device)
+            else:
+                pitches = (
+                    torch.from_numpy(np.load(pitches_path)).to(self.device).float()
+                )
 
         # Slice into segments
         segments = list(
@@ -245,7 +309,7 @@ class SVCInference(nn.Module):
                 segment,
                 sr,
                 pitch_adjust=pitch_adjust,
-                speaker_id=speaker_id,
+                speakers=speakers,
                 sampler_progress=sampler_progress,
                 sampler_interval=sampler_interval,
                 pitches=pitches_segment,
@@ -314,7 +378,7 @@ def parse_args():
         "--speaker",
         type=str,
         default="0",
-        help="Speaker id or speaker name",
+        help="Speaker id or speaker name (if speaker_mapping is specified) or speaker mix (a:0.5,b:0.5)",
     )
 
     parser.add_argument(
@@ -412,6 +476,8 @@ if __name__ == "__main__":
     model = model.to(device)
 
     if args.gradio:
+        from tools.diffusion.gradio_ui import launch_gradio
+
         launch_gradio(
             config,
             model.inference,

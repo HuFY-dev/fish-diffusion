@@ -11,8 +11,8 @@
 <a href="https://hub.docker.com/r/lengyue233/fish-diffusion">
 <img alt="Docker Hub" src="https://img.shields.io/docker/cloud/build/lengyue233/fish-diffusion?style=flat-square&logo=Docker&logoColor=white">
 </a>
-<a href="https://colab.research.google.com/drive/1GPNq1FWH5LE2f79M4QV2UbdWWazfgrpt">
-<img alt="Colab" src="https://img.shields.io/badge/Colab-Notebook-F9AB00?logo=Google%20Colab&style=flat-square&logoColor=white">
+<a href="https://huggingface.co/spaces/lengyue233/fish-diffusion">
+<img alt="Hugging Face" src="https://img.shields.io/badge/🤗%20Spaces-HiFiSinger-blue.svg?style=flat-square">
 </a>
 </div>
 
@@ -23,6 +23,9 @@
 <a href="https://space.bilibili.com/23195420">
 <img alt="BiliBili" src="https://img.shields.io/badge/BiliBili-%E5%86%B7%E6%9C%882333-00A1D6?logo=bilibili&style=flat-square&logoColor=white">
 </a>
+<a href="https://colab.research.google.com/drive/1GPNq1FWH5LE2f79M4QV2UbdWWazfgrpt">
+<img alt="Colab" src="https://img.shields.io/badge/Colab-Notebook-F9AB00?logo=Google%20Colab&style=flat-square&logoColor=white">
+</a>
 </div>
 
 </div>
@@ -32,9 +35,6 @@
 一个简单易懂的 TTS / SVS / SVC 框架.
 
 > 从阅读 [Wiki](https://fishaudio.github.io/fish-diffusion/) 开始! 
- 
-> 由于 main 分支在积极开发, 我们建议新用户选择一个稳定版本, 例如 [v1.12](https://github.com/fishaudio/fish-diffusion/tree/v1.12)  
-[English Document](README.md)
 
 ## 简介
 基于 DiffSinger 实现歌声音色转换。相较于原 diffsvc 仓库，本仓库优缺点如下
@@ -49,7 +49,7 @@
 ```bash
 # 安装 PyTorch 相关核心依赖, 如果已安装则跳过
 # 参考 https://pytorch.org/get-started/locally/
-conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+conda install "pytorch>=2.0.0" "torchvision>=0.15.0" "torchaudio>=2.0.0" pytorch-cuda=11.8 -c pytorch -c nvidia
 
 # 安装 Poetry 依赖管理工具, 如果已安装则跳过
 # 参考 https://python-poetry.org/docs/#installation
@@ -81,11 +81,6 @@ python tools/download_nsf_hifigan.py --use-ghproxy
 
 ```bash
 python tools/download_nsf_hifigan.py --agree-license
-```
-
-如果你想尝试最新的 [ContentVec](https://github.com/auspicious3000/contentvec) 来提取音素特征, 你可以使用以下命令下载
-```bash
-python tools/download_nsf_hifigan.py --content-vec
 ```
 
 ### 手动下载

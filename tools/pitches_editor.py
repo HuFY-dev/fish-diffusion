@@ -112,17 +112,10 @@ def plot():
 
         ax.imshow(mel, aspect="auto", origin="lower")
         ax.plot(f0, label=name, color="red")
-        print(name, f0)
         ax.set_yticks(np.arange(0, 128, 10))
         ax.set_yticklabels(np.round(mel_freqs[::10]).astype(int))
         ax.set_ylabel("Frequency (Hz)")
         ax.set_xlabel("Time")
-
-        # Only keep minutes, seconds and milliseconds
-        # myFmt = mdates.DateFormatter("%M:%S.%f")
-        # ax.xaxis.set_major_formatter(myFmt)
-        # ax.set_xticks(np.arange(0, f0.shape[-1] * 512 / 44100))
-        # ax.set_xticklabels(np.arange(0, f0.shape[-1] * 512 / 44100, 1))
 
         ax.legend()
 
