@@ -1,63 +1,15 @@
-from pathlib import Path
-
-from fish_diffusion.datasets.hifisinger import HiFiSVCDataset
-from fish_diffusion.datasets.utils import get_datasets_from_subfolder
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
 _base_ = [
     "./_base_/archs/hifi_svc.py",
     "./_base_/trainers/base.py",
     "./_base_/schedulers/exponential.py",
-    "./_base_/datasets/naive_svc.py",
+    "./_base_/datasets/hifi_svc.py",
 ]
 
 speaker_mapping = {
-    "aria": 0,
-    "opencpop": 1,
-    "lengyue": 2,
+    "placeholder": 0,
 }
-
-
-mixin_datasets = []
-
-mixin_dataset = Path("dataset/svc-mixin-dataset/M4Singer")
-for sub_path in mixin_dataset.iterdir():
-    splitter = "_" if "_" in sub_path.name else "#"
-    singer_id = sub_path.name.split(splitter)[0]
-    speaker_name = f"{mixin_dataset.name}-{singer_id}"
-
-    if speaker_name not in speaker_mapping:
-        speaker_mapping[speaker_name] = len(speaker_mapping)
-
-    mixin_datasets.append(
-        dict(
-            type="HiFiSVCDataset",
-            path=str(sub_path),
-            speaker_id=speaker_mapping[speaker_name],
-            segment_size=16384,
-        )
-    )
-
-# Process SVC mixin datasets
-dataset = dict(
-    train=dict(
-        _delete_=True,  # Delete the default train dataset
-        type="ConcatDataset",
-        datasets=get_datasets_from_subfolder(
-            "HiFiSVCDataset", "dataset/train", speaker_mapping, segment_size=16384
-        )
-        + mixin_datasets,
-        collate_fn=HiFiSVCDataset.collate_fn,
-    ),
-    valid=dict(
-        _delete_=True,  # Delete the default valid dataset
-        type="ConcatDataset",
-        datasets=get_datasets_from_subfolder(
-            "HiFiSVCDataset", "dataset/valid", speaker_mapping
-        ),
-        collate_fn=HiFiSVCDataset.collate_fn,
-    ),
-)
-
 
 model = dict(
     type="HiFiSVC",
@@ -91,5 +43,14 @@ preprocessing = dict(
 trainer = dict(
     # Disable gradient clipping, which is not supported by custom optimization
     gradient_clip_val=None,
-    max_steps=1000000,
+    val_check_interval=1000,
+    check_val_every_n_epoch=None,
+    callbacks=[
+        ModelCheckpoint(
+            filename="{epoch}-{step}-{valid_loss:.2f}",
+            every_n_train_steps=1000,
+            save_top_k=-1,
+        ),
+        LearningRateMonitor(logging_interval="step"),
+    ],
 )
